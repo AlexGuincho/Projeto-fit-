@@ -62,6 +62,8 @@
 .inline-sets{display:grid;gap:9px;margin-top:12px}.inline-set-row{display:grid;grid-template-columns:34px 1fr 1fr 72px;gap:7px;align-items:end;padding-top:9px;border-top:1px solid var(--border)}.inline-set-row label{font-size:11px;color:var(--muted)}.inline-set-row input{width:100%;min-width:0;margin-top:4px;padding:10px 7px;font-size:16px}.inline-set-row button{min-height:42px;padding:8px;font-size:13px}.inline-set-row>b{align-self:center}@media(max-width:380px){.inline-set-row{grid-template-columns:28px 1fr 1fr 62px;gap:5px}}
 
 .day-ex-media{width:82px;height:82px;object-fit:contain;border-radius:12px;background:#faf7f7;flex:0 0 82px}.day-ex-media.no-media{display:grid;place-items:center;text-align:center;font-size:11px;color:var(--muted);padding:5px}@media(max-width:430px){.day-ex-head{flex-wrap:wrap}.day-ex-media{width:72px;height:72px;flex-basis:72px}.day-ex-head .grow{min-width:130px}}
+
+.finish-overlay{position:fixed;inset:0;background:rgba(30,20,22,.38);z-index:9999;display:grid;place-items:end center;padding:18px}.finish-modal{width:min(100%,520px);background:#fff;border-radius:24px;padding:22px;box-shadow:0 12px 40px rgba(0,0,0,.18)}.finish-modal h3{margin:0 0 5px}.finish-modal label{display:block;margin-top:14px;font-size:13px;color:var(--muted)}.finish-modal input{width:100%;margin-top:6px;font-size:18px}.finish-actions{display:grid;grid-template-columns:1fr 1.5fr;gap:10px;margin-top:18px}
 </style><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script></head><body>
 <div id="authView" class="auth-shell"><div><div class="auth-logo"><div class="flower">✿</div><div class="eyebrow">PROJETO FIT · 12 SEMANAS</div><h1>Seu espaço de consistência.</h1><p class="muted">Entre para salvar seu progresso e continuar de qualquer celular.</p></div><div class="auth-card">
 <div id="loginFields"><label class="label">E-mail</label><input id="email" type="email" autocomplete="email" placeholder="voce@email.com"><label class="label">Senha</label><input id="password" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres"><button id="loginBtn" class="primary">Entrar</button><button id="signupBtn" class="secondary">Criar minha conta</button><button id="resetBtn" class="secondary">Esqueci minha senha</button></div>
@@ -233,7 +235,7 @@ async function renderExec(){
  <button type="button" class="primary finish-day-workout" id="finishDayWorkout">✓ Concluir treino</button>`;
  $('exitExec').onclick=showWorkoutHome;
  $('workoutList').querySelectorAll('[data-save-set]').forEach(b=>b.onclick=async()=>{let key=b.dataset.saveSet,n=+b.dataset.set,reps=+document.querySelector(`[data-reps="${key}-${n}"]`).value,weight=+document.querySelector(`[data-weight="${key}-${n}"]`).value;if(!reps){alert('Informe as repetições.');return}b.disabled=true;let existing=(cur[key]||[]).find(x=>x.set_number===n);let payload={user_id:user.id,session_id:sid,exercise_key:key,exercise_name:b.dataset.name,set_number:n,reps,weight_kg:weight,completed:true};let q=existing?await sb.from('workout_sets').update(payload).eq('id',existing.id):await sb.from('workout_sets').insert(payload);b.disabled=false;if(q.error){alert('Não foi possível salvar a série.');return}b.textContent='✓';b.className='secondary';let st=document.querySelector(`[data-status="${key}"]`);if(st){st.textContent='✓ Registrado';st.classList.add('done')}});
- $('finishDayWorkout').onclick=finishCustomWorkout;
+ $('finishDayWorkout').onclick=openWorkoutFinish;
 }
 async function refreshDayWorkoutStatus(){
  if(!activeSession?.id||!execPlan)return;
@@ -241,6 +243,31 @@ async function refreshDayWorkoutStatus(){
  let done=new Set((data||[]).map(x=>x.exercise_key));
  (execPlan.exercise_keys||[]).forEach(k=>{let el=document.querySelector(`[data-status="${k}"]`);if(el){let ok=done.has(k);el.textContent=ok?'✓ Registrado':'Pendente';el.classList.toggle('done',ok)}});
 }
+
+function workoutMetaKey(id){return `fit_workout_meta_${user?.id||'u'}_${id}`}
+function getWorkoutMeta(id){try{return JSON.parse(localStorage.getItem(workoutMetaKey(id))||'{}')}catch(e){return {}}}
+function saveWorkoutMeta(id,obj){localStorage.setItem(workoutMetaKey(id),JSON.stringify(obj||{}))}
+function openWorkoutFinish(){
+ if(!activeSession?.id)return;
+ let started=activeSession.started_at?new Date(activeSession.started_at):new Date();
+ let mins=Math.max(1,Math.round((Date.now()-started.getTime())/60000));
+ let modal=document.createElement('div');modal.className='finish-overlay';modal.id='finishOverlay';
+ modal.innerHTML=`<div class="finish-modal"><h3>Finalizar treino</h3><p class="muted">Registre o resumo do treino de hoje.</p><label>Tempo de treino (min)<input id="finishMinutes" type="number" min="1" inputmode="numeric" value="${mins}"></label><label>Calorias gastas (kcal)<input id="finishCalories" type="number" min="0" inputmode="numeric" placeholder="Ex.: 320"></label><div class="finish-actions"><button class="secondary" id="cancelFinish">Cancelar</button><button class="primary" id="confirmFinish">Salvar e concluir</button></div></div>`;
+ document.body.appendChild(modal);
+ $('cancelFinish').onclick=()=>modal.remove();
+ $('confirmFinish').onclick=async()=>{let minutes=Math.max(1,+$('finishMinutes').value||mins),calories=Math.max(0,+$('finishCalories').value||0);$('confirmFinish').disabled=true;saveWorkoutMeta(activeSession.id,{calories_kcal:calories,duration_minutes:minutes});await finishCustomWorkoutWithSummary(minutes,calories);modal.remove()};
+}
+async function finishCustomWorkoutWithSummary(minutes,calories){
+ if(!activeSession?.id)return;
+ let now=new Date().toISOString();
+ let {error}=await sb.from('workout_sessions').update({completed_at:now,duration_minutes:minutes}).eq('id',activeSession.id);
+ if(error){alert('Não foi possível concluir o treino.');return}
+ await upsertCheckin({training_done:true});
+ activeSession=null;execPlan=null;
+ alert(`Treino concluído! ${minutes} min${calories?` · ${calories} kcal`:''}`);
+ showWorkoutHome();await loadAll();
+}
+
 async function finishCustomWorkout(){if(activeSession)await sb.from('workout_sessions').update({completed_at:new Date().toISOString()}).eq('id',activeSession.id);await upsertCheckin({training_done:true});$('exerciseDetail').classList.add('hidden2');$('workoutList').classList.remove('hidden2');$('workoutList').innerHTML=`<div class="card workout-summary"><h1>✓</h1><h2>Treino concluído</h2><p>${execPlan?.name||'Treino'}</p><button class="primary" id="summaryDone">Concluir</button></div>`;$('summaryDone').onclick=()=>{activeSession=null;execPlan=null;showWorkoutHome();loadAll()}}
 async function progressionFor(key){let {data,error}=await sb.from('workout_sets').select('reps,weight_kg').eq('exercise_key',key).order('id',{ascending:false}).limit(3);if(error)return 'Histórico de carga indisponível.';if(!data||!data.length)return 'Primeiro registro deste exercício.';let best=data[0],w=Number(best.weight_kg||0),r=Number(best.reps||0);return `Último: ${w||'—'} kg · ${r||'—'} reps${w&&r>=12?' · Próxima meta: '+(w+2.5)+' kg':''}`}
 async function renderPlanCards(){
