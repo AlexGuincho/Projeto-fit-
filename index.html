@@ -304,6 +304,10 @@ async function finishCustomWorkout(){if(activeSession)await sb.from('workout_ses
 async function progressionFor(key){let {data,error}=await sb.from('workout_sets').select('reps,weight_kg').eq('exercise_key',key).order('id',{ascending:false}).limit(3);if(error)return 'Histórico de carga indisponível.';if(!data||!data.length)return 'Primeiro registro deste exercício.';let best=data[0],w=Number(best.weight_kg||0),r=Number(best.reps||0);return `Último: ${w||'—'} kg · ${r||'—'} reps${w&&r>=12?' · Próxima meta: '+(w+2.5)+' kg':''}`}
 async function renderPlanCards(){
  let box=$('myWorkoutCard');if(!box)return;
+ box.innerHTML=`<h3>Meus treinos</h3><p class="muted">Carregando seus treinos...</p>`;
+ let {data:freshPlans,error:freshPlanError}=await sb.from('workout_plans').select('*').order('plan_key');
+ if(!freshPlanError&&freshPlans){workoutPlans=freshPlans}
+ else if(freshPlanError){console.error(freshPlanError)}
  let saved=(workoutPlans||[]).filter(p=>p&&p.id);
  let {data:recent}=await sb.from('workout_sessions').select('plan_id,workout_type,completed_at').not('completed_at','is',null).order('completed_at',{ascending:false}).limit(60);
  let byPlan={};(recent||[]).forEach(x=>{if(x.plan_id&&!byPlan[x.plan_id])byPlan[x.plan_id]=x});
