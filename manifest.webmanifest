@@ -1,1 +1,24 @@
-{"name":"Projeto Fit — 12 Semanas","short_name":"Projeto Fit","start_url":"./","display":"standalone","background_color":"#fbf8f7","theme_color":"#b77b87","description":"Acompanhamento diário de hábitos e consistência por 12 semanas.","icons":[{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
+{
+  "name": "ELYVA",
+  "short_name": "ELYVA",
+  "description": "Evolua. Registre. Supere.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#FBF4F1",
+  "theme_color": "#B77B87",
+  "icons": [
+    {
+      "src": "elyva-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "elyva-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
